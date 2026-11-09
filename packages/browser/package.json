@@ -1,0 +1,39 @@
+{
+  "name": "@plaintrace/browser",
+  "version": "0.1.0",
+  "description": "Cookieless browser tracker for the analytics collector.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/plaintrace-dev/node-sdk.git",
+    "directory": "packages/browser"
+  },
+  "homepage": "https://plaintrace.dev",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "esbuild": "0.28.2",
+    "happy-dom": "21.0.4",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}

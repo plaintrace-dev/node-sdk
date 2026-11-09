@@ -1,0 +1,26 @@
+[
+  {
+    "key": "sk_live_0123456789abcdefghijABCDEFGHIJ01",
+    "t": 1800000000,
+    "method": "POST",
+    "path": "/v1/events",
+    "body_utf8": "{\"site_id\":\"x\",\"events\":[]}",
+    "expected_header": "t=1800000000,v1=20f223170c589f72ed9a1781fb3662c14aa59a0b25438cacd123f4f95d31b76a"
+  },
+  {
+    "key": "sk_live_ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
+    "t": 1800000123,
+    "method": "GET",
+    "path": "/v1/config",
+    "body_utf8": "",
+    "expected_header": "t=1800000123,v1=b1c7af036c665e66a446dba820f158454f7e3b44b7fab40ce3875eba68e2c9dc"
+  },
+  {
+    "key": "sk_live_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "t": 1800000999,
+    "method": "POST",
+    "path": "/v1/server/events",
+    "body_utf8": "{\"name\":\"Sipariş ✓\"}",
+    "expected_header": "t=1800000999,v1=d693df46a8f6b49a5e4f60b293b777c757ee39a9a4933bf6890df47663e9356b"
+  }
+]

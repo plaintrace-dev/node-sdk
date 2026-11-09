@@ -1,0 +1,35 @@
+import { createTracker, type Tracker, type TrackerOptions } from './core.js'
+import type { Consent } from './privacy.js'
+import { VERSION } from './version.js'
+
+export type { Tracker, TrackerOptions } from './core.js'
+export type { Consent } from './privacy.js'
+
+export type InitOptions = Omit<TrackerOptions, 'sdk' | 'version' | 'window'>
+
+let instance: Tracker | undefined
+let queue: ((t: Tracker) => void)[] = []
+
+/** For tests and unusual hosts: init against a given window, or none (server rendering). */
+export function initIn(win: Window | undefined, o: InitOptions): Tracker | undefined {
+  if (!win) return undefined
+  if (instance) return instance
+  // The script tag got there first: one tracker per page.
+  const tag = (win as unknown as { px?: { __px?: true; tracker?: Tracker } }).px
+  instance = tag?.__px && tag.tracker ? tag.tracker : createTracker({ ...o, sdk: 'web-npm', version: VERSION, window: win })
+  for (const call of queue.splice(0)) call(instance)
+  return instance
+}
+
+/** Starts the tracker once and returns it; undefined during server rendering. */
+export function init(o: InitOptions): Tracker | undefined {
+  return initIn(typeof window === 'undefined' ? undefined : window, o)
+}
+
+const later = (call: (t: Tracker) => void) => (instance ? call(instance) : void queue.push(call))
+
+export const track = (name: string, props?: Record<string, unknown>) => later((t) => t.track(name, props))
+export const conversion = (name: string, props?: Record<string, unknown>) => later((t) => t.conversion(name, props))
+export const identify = (userId: string) => later((t) => t.identify(userId))
+export const consent = (c: Consent) => later((t) => t.consent(c))
+export const visitId = (): string | null => instance?.visitId() ?? null

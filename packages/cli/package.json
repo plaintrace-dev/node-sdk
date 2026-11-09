@@ -1,0 +1,32 @@
+{
+  "name": "@plaintrace/cli",
+  "version": "0.1.0",
+  "description": "Adds the analytics tracker to a web project: npx @plaintrace/cli init --site <id> --endpoint <collector>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/plaintrace-dev/node-sdk.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://plaintrace.dev",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "plaintrace": "dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}
