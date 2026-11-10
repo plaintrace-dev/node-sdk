@@ -179,3 +179,17 @@ test('stats taken by a failed send are reported by the next one', async () => {
   await vi.advanceTimersByTimeAsync(5_000)
   expect(sent.at(-1)!.body.stats?.dropped).toBe(1)
 })
+
+test('a backoff timer that wakes a fraction early still delivers the queue', async () => {
+  let fail = true
+  respond = () => (fail ? new Response('', { status: 503 }) : new Response('{}', { status: 202 }))
+  // Browsers round timeouts; a delay of 1234.5 ms can fire at 1234 ms, before backoffUntil.
+  const t = make({ random: () => 0.3717, schedule: (fn, ms) => { const h = setTimeout(fn, Math.max(0, Math.floor(ms) - 1)); return () => clearTimeout(h) } })
+  t.enqueue(event(1), true)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(sent).toHaveLength(1)
+  fail = false
+  await vi.advanceTimersByTimeAsync(60_000)
+  expect(sent.length).toBeGreaterThanOrEqual(2)
+  expect(sent.at(-1)!.body.events.map((e) => e.event_id)).toEqual(['id-1'])
+})

@@ -144,3 +144,57 @@ test('leaving sends the page engagement once, though pagehide and visibilitychan
   Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
   expect(events().filter((e) => e.type === 'engagement')).toHaveLength(1)
 })
+
+test('a soft page view still waiting for its title leaves in the exit beacon, not by fetch', async () => {
+  const beaconed: any[] = []
+  start({ beaconImpl: (_url, body) => (beaconed.push(...JSON.parse(body).events), true) })
+  await vi.advanceTimersByTimeAsync(3_100)
+  history.pushState(null, '', '/docs') // the title has not changed yet: the view waits
+  window.dispatchEvent(new Event('pagehide'))
+  await vi.advanceTimersByTimeAsync(5_000)
+  expect(events().filter((e) => e.navigation === 'soft')).toHaveLength(0)
+  expect(beaconed.filter((e) => e.navigation === 'soft')).toHaveLength(1)
+})
+
+test('time on an excluded page is not credited to the page before it, nor used as referrer', async () => {
+  start({ excludePaths: ['/admin/*'] })
+  await vi.advanceTimersByTimeAsync(3_100)
+  window.dispatchEvent(new Event('pointerdown'))
+  history.pushState(null, '', '/admin/users')
+  await vi.advanceTimersByTimeAsync(3_000)
+  window.dispatchEvent(new Event('pointerdown'))
+  history.pushState(null, '', '/docs')
+  await vi.advanceTimersByTimeAsync(3_000)
+  const eng = events().filter((e) => e.type === 'engagement')
+  expect(eng).toHaveLength(1) // the time on /pricing, sent when leaving it
+  const docs = events().find((e) => e.page?.url === 'https://a.com/docs')
+  expect(docs.referrer).toBeUndefined()
+})
+
+test('consent given after an SPA route change counts that page as soft, not as a load', async () => {
+  const t = start({ requireConsent: true })
+  await vi.advanceTimersByTimeAsync(3_100)
+  history.pushState(null, '', '/docs')
+  await vi.advanceTimersByTimeAsync(3_000)
+  t.consent('granted')
+  await vi.advanceTimersByTimeAsync(1_000)
+  expect(events().filter((e) => e.type === 'page_view').map((e) => e.navigation)).toEqual(['soft'])
+})
+
+test('consent granted while the page is still prerendering counts it once, when shown', async () => {
+  Object.defineProperty(document, 'prerendering', { value: true, configurable: true })
+  try {
+    const t = start({ requireConsent: true })
+    t.consent('granted') // a consent banner script answering at startup
+    await vi.advanceTimersByTimeAsync(3_100)
+    expect(events().filter((e) => e.type === 'page_view')).toHaveLength(0)
+    Object.defineProperty(document, 'prerendering', { value: false, configurable: true })
+    document.dispatchEvent(new Event('prerenderingchange'))
+    await vi.advanceTimersByTimeAsync(1_000)
+    const views = events().filter((e) => e.type === 'page_view')
+    expect(views.map((e) => e.navigation)).toEqual(['prerender'])
+    expect(views[0].referrer).toBeUndefined()
+  } finally {
+    delete (document as any).prerendering
+  }
+})

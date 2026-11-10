@@ -92,3 +92,52 @@ test('uncovered files are named after a successful write', async () => {
   expect(await run(['init', '--site', 's1', '--endpoint', 'https://c.test', '--dir', dir, '--yes'], { fetch: sdk, log: o.log, interactive: false })).toBe(0)
   expect(o.text()).toMatch(/not covered.*pages\//s)
 })
+
+test('a collector that answers /v1/sdk with an error is the wrong address: nothing is written', async () => {
+  const dir = project({ 'index.html': HTML })
+  const notFound = (async () => new Response('', { status: 404 })) as unknown as typeof fetch
+  const o = io()
+  expect(await run(['init', '--site', 's1', '--endpoint', 'https://c.test', '--dir', dir, '--yes'], { fetch: notFound, log: o.log, interactive: false })).toBe(1)
+  expect(readFileSync(join(dir, 'index.html'), 'utf8')).toBe(HTML)
+  expect(o.text()).toMatch(/404/)
+})
+
+test('a plain http endpoint other than localhost gets a warning', async () => {
+  const o = io()
+  await run(['init', '--site', 's1', '--endpoint', 'http://c.test', '--dir', project({ 'index.html': HTML }), '--dry-run'], { fetch: sdk, log: o.log, interactive: false })
+  expect(o.text()).toMatch(/http:\/\/.*https/i)
+  const local = io()
+  await run(['init', '--site', 's1', '--endpoint', 'http://localhost:8080', '--dir', project({ 'index.html': HTML }), '--dry-run'], { fetch: sdk, log: local.log, interactive: false })
+  expect(local.text()).not.toMatch(/mixed content|blocked/i)
+})
+
+test('a file the CLI creates is shown as a new file, every line added', async () => {
+  const o = io()
+  await run(['init', '--site', 's1', '--endpoint', 'https://c.test', '--dir', project({ 'package.json': pkg({ next: '15' }), 'pages/index.tsx': 'x' }), '--dry-run'], { fetch: sdk, log: o.log, interactive: false })
+  expect(o.text()).toMatch(/new file: pages\/_document\.tsx/)
+  const body = o.text().split('new file: pages/_document.tsx')[1]!.split('Dry run')[0]!.trim().split('\n')
+  expect(body.every((l) => l.startsWith('+'))).toBe(true)
+})
+
+test('nothing at the root of a monorepo: the projects below are suggested with --dir', async () => {
+  const dir = project({ 'package.json': { name: 'root', private: true }, 'apps/web/package.json': pkg({ next: '15' }), 'apps/web/app/layout.tsx': NEXT_LAYOUT, 'packages/ui/package.json': pkg({ react: '19' }) })
+  const o = io()
+  expect(await run(['init', '--site', 's1', '--endpoint', 'https://c.test', '--dir', dir], { fetch: sdk, log: o.log, interactive: false })).toBe(1)
+  expect(o.text()).toContain(`--dir ${join(dir, 'apps/web')}`)
+  expect(o.text()).not.toContain('packages/ui')
+})
+
+test('a collector outage (5xx) falls back to the latest script, like a network error', async () => {
+  const dir = project({ 'index.html': HTML })
+  const outage = (async () => new Response('', { status: 503 })) as unknown as typeof fetch
+  const o = io()
+  expect(await run(['init', '--site', 's1', '--endpoint', 'https://c.test', '--dir', dir, '--yes'], { fetch: outage, log: o.log, interactive: false })).toBe(0)
+  expect(readFileSync(join(dir, 'index.html'), 'utf8')).toContain('src="https://c.test/t.js"')
+})
+
+test('--dir suggestions are paths from where the command runs', async () => {
+  const root = project({ 'mono/package.json': { name: 'root' }, 'mono/apps/web/package.json': pkg({ next: '15' }), 'mono/apps/web/app/layout.tsx': NEXT_LAYOUT })
+  const o = io()
+  await run(['init', '--site', 's1', '--endpoint', 'https://c.test', '--dir', join(root, 'mono')], { fetch: sdk, log: o.log, interactive: false })
+  expect(o.text()).toContain(`--dir ${join(root, 'mono', 'apps/web')}`)
+})

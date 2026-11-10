@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { detect } from './detect.js'
@@ -31,20 +31,46 @@ Exit codes: 0 done or nothing to do, 1 needs your input, 2 failed.`
 const SITE = /^[A-Za-z0-9_-]{1,64}$/
 const SRI = /^sha(256|384|512)-[A-Za-z0-9+/]+={0,2}$/
 
-async function resolveScript(io: Io, endpoint: string, site: string, latest: boolean): Promise<Script> {
+/** The script to add, or why the endpoint is not a collector (a string). */
+async function resolveScript(io: Io, endpoint: string, site: string, latest: boolean): Promise<Script | string> {
   const fallback = { site, src: `${endpoint}/t.js` }
   if (latest) return fallback
+  let res: Response
   try {
-    const res = await io.fetch(`${endpoint}/v1/sdk`, { signal: AbortSignal.timeout(5000) })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const info = (await res.json()) as { path?: unknown; integrity?: unknown }
-    if (typeof info.path !== 'string' || !/^\/v\/[\w.-]+\/t\.js$/.test(info.path) || typeof info.integrity !== 'string' || !SRI.test(info.integrity))
-      throw new Error('unexpected response')
-    return { site, src: endpoint + info.path, integrity: info.integrity }
+    res = await io.fetch(`${endpoint}/v1/sdk`, { signal: AbortSignal.timeout(5000) })
   } catch (e) {
-    io.log(`! Could not read the pinned version from ${endpoint}/v1/sdk (${(e as Error).message}); using the latest script without SRI.`)
+    // Offline or not deployed yet: still useful, but unpinned.
+    io.log(`! Could not reach ${endpoint}/v1/sdk (${(e as Error).message}); using the latest script without SRI.`)
     return fallback
   }
+  // The collector is there but failing for now: same as being unreachable.
+  if (res.status >= 500) {
+    io.log(`! ${endpoint}/v1/sdk answered HTTP ${res.status}; using the latest script without SRI.`)
+    return fallback
+  }
+  // Something answered, and not like a collector: most likely a wrong --endpoint.
+  const wrong = `${endpoint}/v1/sdk answered ${res.ok ? 'with something other than the script version' : `HTTP ${res.status}`}: check --endpoint (or pass --latest).`
+  if (!res.ok) return wrong
+  const info = (await res.json().catch(() => ({}))) as { path?: unknown; integrity?: unknown }
+  if (typeof info.path !== 'string' || !/^\/v\/[\w.-]+\/t\.js$/.test(info.path) || typeof info.integrity !== 'string' || !SRI.test(info.integrity)) return wrong
+  return { site, src: endpoint + info.path, integrity: info.integrity }
+}
+
+/** Folders below dir (one level, and inside apps/ and packages/) that hold a project the CLI can edit. */
+function projectsBelow(dir: string): string[] {
+  const dirs = (base: string) => {
+    try {
+      return readdirSync(join(dir, base), { withFileTypes: true })
+        .filter((e) => e.isDirectory() && e.name !== 'node_modules' && !e.name.startsWith('.'))
+        .map((e) => (base === '.' ? e.name : `${base}/${e.name}`))
+    } catch {
+      return []
+    }
+  }
+  return ['.', 'apps', 'packages']
+    .flatMap(dirs)
+    .filter((rel) => existsSync(join(dir, rel, 'package.json')) || existsSync(join(dir, rel, 'index.html')))
+    .filter((rel) => detect(join(dir, rel)).kind !== 'unknown')
 }
 
 export async function run(argv: string[], io: Io): Promise<number> {
@@ -82,6 +108,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
     // new URL() leaves quotes and braces in the host; they would break out of the src attribute.
     if (!/^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])$/.test(u.hostname) || !/^[A-Za-z0-9._~\/%-]*$/.test(u.pathname)) throw new Error()
     endpoint = u.href.replace(/\/+$/, '')
+    if (u.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(u.hostname))
+      io.log(`! ${endpoint} is plain http://: browsers block it on https:// sites (mixed content). Use https:// in production.`)
   } catch {
     return io.log('--endpoint must be an http(s) URL such as https://collect.example.com'), 1
   }
@@ -89,8 +117,11 @@ export async function run(argv: string[], io: Io): Promise<number> {
   try {
     const dir = resolve(o.dir ?? '.')
     const script = await resolveScript(io, endpoint, o.site, !!o.latest)
+    if (typeof script === 'string') return io.log(script), 1
     const found = detect(dir)
     if (!('target' in found)) {
+      const below = found.kind === 'unknown' ? projectsBelow(dir) : []
+      if (below.length > 0) io.log(`Nothing to edit here, but these folders hold projects: rerun with ${below.map((b) => `--dir ${join(o.dir ?? '.', b)}`).join(' or ')}`)
       io.log(
         found.kind === 'manual'
           ? `${found.framework} detected. It is not edited automatically; add this to ${found.hint}:`
@@ -102,10 +133,12 @@ export async function run(argv: string[], io: Io): Promise<number> {
 
     const file = join(dir, found.target)
     let before = ''
+    let created = false
     try {
       before = readFileSync(file, 'utf8')
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT' || found.kind !== 'next-pages') throw e
+      created = true
     }
     const edit = applyEdit(found.kind, before, snippet(found.kind, script))
     io.log(`${found.framework} → ${found.target}`)
@@ -118,7 +151,11 @@ export async function run(argv: string[], io: Io): Promise<number> {
       return 1
     }
 
-    io.log(`\n${diff(before, edit.content)}\n`)
+    io.log(
+      created
+        ? `\nnew file: ${found.target}\n${edit.content.replace(/\n$/, '').split('\n').map((l) => `+${l}`).join('\n')}\n`
+        : `\n${diff(before, edit.content)}\n`,
+    )
     if (o['dry-run']) return io.log('Dry run: nothing written.'), 0
     if (!o.yes) {
       if (!io.interactive || !io.ask) return io.log('Not a terminal: rerun with --yes to write the change.'), 1

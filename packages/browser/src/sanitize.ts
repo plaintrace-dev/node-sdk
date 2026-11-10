@@ -64,7 +64,8 @@ export function cleanUrl(href: string, extraKeys: readonly string[]): string {
   })
   const query = kept.toString()
   u.search = query
-  return truncate(u.toString(), URL_MAX)
+  // A cut can land inside a %-escape: drop the broken tail.
+  return truncate(u.toString(), URL_MAX).replace(/%[0-9A-Fa-f]?$/, '')
 }
 
 export function cleanTitle(s: string): string {
@@ -73,7 +74,7 @@ export function cleanTitle(s: string): string {
 
 export type PropertyValue = string | number | boolean | null
 
-/** At most 32 valid, non-sensitive properties; undefined when none remain. */
+/** At most 32 valid, non-sensitive properties (nulls are dropped, as the collector does); undefined when none remain. */
 export function cleanProps(p: Record<string, unknown> | undefined, extraKeys: readonly string[] = []): Record<string, PropertyValue> | undefined {
   if (!p) return undefined
   const out: Record<string, PropertyValue> = {}
@@ -83,7 +84,7 @@ export function cleanProps(p: Record<string, unknown> | undefined, extraKeys: re
     if (key.length > KEY_MAX || !PROP_KEY.test(key) || key.toLowerCase().startsWith(RESERVED) || isRedactedKey(key, extraKeys)) continue
     const v = p[key]
     if (typeof v === 'string') out[key] = truncate(redactText(v), VALUE_MAX)
-    else if (typeof v === 'boolean' || v === null) out[key] = v
+    else if (typeof v === 'boolean') out[key] = v
     else if (typeof v === 'number' && Number.isFinite(v)) out[key] = v
     else continue
     n++

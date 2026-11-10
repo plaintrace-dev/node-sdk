@@ -16,7 +16,8 @@ const read = (req) => new Promise((resolve) => {
 createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${port}`)
   const send = (status, body, type = 'application/json') => {
-    res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store' })
+    // Pages sent with no-store are never kept in the back/forward cache: HTML is revalidated instead.
+    res.writeHead(status, { 'content-type': type, 'cache-control': type.startsWith('text/html') ? 'no-cache' : 'no-store' })
     res.end(body)
   }
   if (url.pathname === '/t.js') return send(200, await readFile(join(root, '../dist/t.js')), 'text/javascript')

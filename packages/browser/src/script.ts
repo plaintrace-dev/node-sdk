@@ -50,13 +50,17 @@ export function install(win: Window, overrides: Overrides = {}): Tracker | undef
   }
   // A function cannot travel in an attribute: px('pageUrl', fn) is read before the first page view.
   const pageUrl = queued.find((c) => c[0] === 'pageUrl')?.[1]
-  const tracker = createTracker({
-    ...(opts as TrackerOptions),
-    ...(typeof pageUrl === 'function' ? { pageUrl: pageUrl as TrackerOptions['pageUrl'] } : {}),
-    sdk: 'web',
-    version: VERSION,
-    window: win,
-  })
+  // The npm package may have started one already: one tracker per page.
+  const tracker =
+    (w['__px_tracker'] as Tracker | undefined) ??
+    createTracker({
+      ...(opts as TrackerOptions),
+      ...(typeof pageUrl === 'function' ? { pageUrl: pageUrl as TrackerOptions['pageUrl'] } : {}),
+      sdk: 'web',
+      version: VERSION,
+      window: win,
+    })
+  w['__px_tracker'] = tracker
 
   const api: Stub = (method: unknown, ...args: unknown[]) => {
     const fn = (tracker as unknown as Record<string, unknown>)[String(method)]

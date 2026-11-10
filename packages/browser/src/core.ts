@@ -75,10 +75,13 @@ export function createTracker(o: TrackerOptions): Tracker {
   let visit: { id: string; at: number } | null = null
   let lastEventAt = 0
   let lastPage: OutEvent['page'] | undefined
+  let lastPath = ''
   let viewSent = false
+  // How the latest page not yet counted was reached: consent given later counts it as that.
+  let unsentKind: NavKind = 'load'
   let warned = false
 
-  const may = () => !stopped && privacy.mayCollect() && !excluded(win.location.pathname, o.excludePaths ?? [])
+  const may = (path = win.location.pathname) => !stopped && privacy.mayCollect() && !excluded(path, o.excludePaths ?? [])
   const transport = createTransport({
     endpoint,
     site: o.site,
@@ -104,9 +107,10 @@ export function createTracker(o: TrackerOptions): Tracker {
   }
 
   let nav: ReturnType<typeof watchNavigation> | undefined
-  const emit = (e: Omit<OutEvent, 'event_id' | 'occurred_at'>, immediate = false) => {
+  /** path: the address the event belongs to, when it is not the current one. */
+  const emit = (e: Omit<OutEvent, 'event_id' | 'occurred_at'>, immediate = false, path?: string) => {
     if (e.type !== 'page_view') nav?.settle()
-    if (!may()) return
+    if (!may(path)) return
     lastEventAt = now()
     transport.enqueue({ event_id: uuidV7(), occurred_at: new Date(lastEventAt).toISOString(), page: page(), ...e }, immediate)
   }
@@ -114,26 +118,40 @@ export function createTracker(o: TrackerOptions): Tracker {
   const engagement = createEngagement(win)
   const sendEngagement = () => {
     const sample = engagement.collect()
-    if (sample && lastPage) emit({ type: 'engagement', page: lastPage, engagement: sample })
+    // The page being left: the address may already be the next page's.
+    if (sample && lastPage) emit({ type: 'engagement', page: lastPage, engagement: sample }, false, lastPath)
   }
 
   const onPage = (kind: NavKind) => {
     left = false
     if (kind === 'restore') engagement.collect() // the time before leaving went out at pagehide
     else sendEngagement()
-    if (!may()) return
+    if (!may()) {
+      // Nothing of an unmeasured page is kept: its time is not credited to the page before it.
+      lastPage = undefined
+      unsentKind = kind
+      return
+    }
     const current = page()
     const referrer = viewSent ? lastPage?.url : cleanUrl(doc.referrer, redactKeys) || undefined
-    emit({ type: 'page_view', navigation: kind, page: current, ...(referrer ? { referrer } : {}) }, true)
+    // On the way out the exit beacon carries it; a separate fetch could be cut off.
+    emit({ type: 'page_view', navigation: kind, page: current, ...(referrer ? { referrer } : {}) }, !exiting)
     lastPage = current
+    lastPath = win.location.pathname
     viewSent = true
   }
 
   // pagehide and visibilitychange both fire on the way out, in either order: leave once,
   // until the page is visible again.
   let left = false
+  let exiting = false
   const leave = () => {
-    nav?.settle()
+    exiting = true
+    try {
+      nav?.settle()
+    } finally {
+      exiting = false
+    }
     if (left) return
     left = true
     sendEngagement()
@@ -200,7 +218,8 @@ export function createTracker(o: TrackerOptions): Tracker {
       privacy.setConsent(c)
       if (c === 'denied') transport.cancel()
       // The page the banner was shown on has not been counted yet.
-      if (c === 'granted' && !viewSent) onPage('load')
+      // While prerendering, the page is counted when it is shown (prerenderingchange), not now.
+      if (c === 'granted' && !viewSent && !(doc as Document & { prerendering?: boolean }).prerendering) onPage(unsentKind)
     },
     visitId: () => (visit && may() && now() - lastEventAt < VISIT_IDLE_MS ? visit.id : null),
     flush: () => transport.flush(),

@@ -80,3 +80,52 @@ test('another vendor using data-site (Fathom) is not mistaken for ours', () => {
   const fathom = HTML.replace('</head>', '<script src="https://cdn.usefathom.com/script.js" data-site="ABCDE" defer></script>\n  </head>')
   expect(applyEdit('html', fathom, snippet('html', pinned)).ok).toBe(true)
 })
+
+test('CRLF files stay CRLF; tab-indented files get tabs', () => {
+  const crlf = HTML.replace(/\n/g, '\r\n')
+  const r = applyEdit('html', crlf, snippet('html', pinned))
+  if (!r.ok) throw new Error(r.reason)
+  expect(r.content.replace(/\r\n/g, '')).not.toContain('\n')
+  const tabs = '<html>\n\t<head>\n\t</head>\n</html>\n'
+  const t = applyEdit('html', tabs, snippet('html', pinned))
+  if (!t.ok) throw new Error(t.reason)
+  expect(t.content).toContain('\t\t<script async src=')
+  expect(t.content).not.toMatch(/\t {2}/)
+})
+
+test('a BOM stays the first character after the import is added', () => {
+  const r = applyEdit('next-app', '﻿' + NEXT_LAYOUT, snippet('next-app', pinned))
+  if (!r.ok) throw new Error(r.reason)
+  expect(r.content.startsWith("﻿import Script from 'next/script'\n")).toBe(true)
+})
+
+test('next/script imported under another name: that name is used, no second import', () => {
+  const r = applyEdit('next-app', `import NextScript from 'next/script'\n${NEXT_LAYOUT}`, snippet('next-app', pinned))
+  if (!r.ok) throw new Error(r.reason)
+  expect(r.content.match(/from 'next\/script'/g)).toHaveLength(1)
+  expect(r.content).toContain('<NextScript src="https://c.test/v/0.1.0/t.js"')
+  expect(r.content).not.toContain('<Script ')
+})
+
+test.each([
+  ["import Script, { type ScriptProps } from 'next/script'", '<Script src='],
+  ["import { default as S } from 'next/script'", '<S src='],
+  ["import * as NS from 'next/script'", '<NS.default src='],
+])('an existing next/script import (%s) is reused, never imported twice', (line, tag) => {
+  const r = applyEdit('next-app', `${line}\n${NEXT_LAYOUT}`, snippet('next-app', pinned))
+  if (!r.ok) throw new Error(r.reason)
+  expect(r.content.match(/from 'next\/script'/g)).toHaveLength(1)
+  expect(r.content).toContain(tag)
+})
+
+test('a commented-out next/script import does not count', () => {
+  const r = applyEdit('next-app', `// import Foo from 'next/script'\n${NEXT_LAYOUT}`, snippet('next-app', pinned))
+  if (!r.ok) throw new Error(r.reason)
+  expect(r.content).toContain("import Script from 'next/script'\n")
+  expect(r.content).toContain('<Script src=')
+})
+
+test('a tag installed under a renamed component is recognised', () => {
+  const installed = NEXT_LAYOUT.replace('</body>', '<NextScript src="https://c.test/v/0.1.0/t.js" data-site="s1" /></body>')
+  expect(applyEdit('next-app', `import NextScript from 'next/script'\n${installed}`, snippet('next-app', pinned))).toEqual({ ok: false, reason: 'already_installed' })
+})

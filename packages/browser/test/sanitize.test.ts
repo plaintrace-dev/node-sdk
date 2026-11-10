@@ -26,11 +26,21 @@ test('cleanProps keeps valid, non-sensitive properties', () => {
     plan: 'pro',
     seats: 5,
     ok: true,
-    none: null,
   })
   const many = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`k${String(i).padStart(2, '0')}`, 'v']))
   expect(Object.keys(cleanProps(many) ?? {})).toHaveLength(32)
   expect(cleanProps({})).toBeUndefined()
+})
+
+test('null properties are dropped (the collector drops them) and take no slot of the 32', () => {
+  const nulls = Object.fromEntries(Array.from({ length: 32 }, (_, i) => [`a${String(i).padStart(2, '0')}`, null]))
+  expect(cleanProps({ ...nulls, zplan: 'pro' })).toEqual({ zplan: 'pro' })
+})
+
+test('a truncated URL never ends inside a %-escape', () => {
+  const url = cleanUrl('https://a.com/?q=' + 'é'.repeat(400), [])
+  expect(url.length).toBeLessThanOrEqual(1024)
+  expect(url).not.toMatch(/%[0-9A-F]?$/i)
 })
 
 test('isValidName', () => {

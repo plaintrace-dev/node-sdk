@@ -104,7 +104,7 @@ export function createTransport(o: TransportOptions) {
       return
     }
     const ceiling = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (attempts - 1))
-    const delay = Math.max(serverMs ?? 0, ceiling / 2 + o.random() * (ceiling / 2))
+    const delay = Math.ceil(Math.max(serverMs ?? 0, ceiling / 2 + o.random() * (ceiling / 2)))
     backoffUntil = o.now() + delay
     later(() => flush(), delay)
   }
@@ -197,6 +197,8 @@ export function createTransport(o: TransportOptions) {
     if (!beacon && o.now() < backoffUntil) {
       requeue(buffer)
       buffer = []
+      // A timer may wake a little early (browsers round delays): try again when the backoff ends.
+      if (!cancelTimer) later(() => flush(), backoffUntil - o.now())
       return
     }
     const pending = queue.concat(buffer)
