@@ -102,3 +102,19 @@ test('calls made before init are kept up to 100 (a server render never calls ini
   expect(custom[0].name).toBe('e0')
   t?.stop()
 }, 10_000)
+
+test('a stopped npm tracker, or one for another site, is not reused by the script tag', async () => {
+  const fetchImpl = (async () => new Response('{}', { status: 202 })) as unknown as typeof fetch
+  const { init } = await import('../src/index.js')
+  const { install } = await import('../src/script.js')
+  const a = init({ site: 's', endpoint: 'https://c.test', fetchImpl, storage: 'none' })
+  a?.stop()
+  const b = install(window, { site: 's', endpoint: 'https://c.test', fetchImpl, storage: 'none' })
+  expect(b).toBeDefined()
+  expect(b).not.toBe(a)
+  delete (window as any).px
+  const c = install(window, { site: 'other', endpoint: 'https://c.test', fetchImpl, storage: 'none' })
+  expect(c).not.toBe(b)
+  b?.stop()
+  c?.stop()
+})

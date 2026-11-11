@@ -72,7 +72,15 @@ export function createClicks(win: Window, report: (r: ClickRecord) => void, page
         observer?.disconnect()
       },
     }
-    const timer = win.setTimeout(() => entry.fire(!changed && win.location.href === href && doc.activeElement === focus), DEAD_MS)
+    // Selecting text is an effect too, but only a selection this click made: one already there
+    // before it says nothing about the click.
+    const selection = () => {
+      const sel = win.getSelection?.()
+      return sel && !sel.isCollapsed ? sel.toString() : ''
+    }
+    const before = selection()
+    const selected = () => selection() !== '' && selection() !== before
+    const timer = win.setTimeout(() => entry.fire(!changed && win.location.href === href && doc.activeElement === focus && !selected()), DEAD_MS)
     pending.add(entry)
   }
   doc.addEventListener('click', onClick, true)

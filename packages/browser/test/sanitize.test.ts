@@ -58,3 +58,15 @@ test('storedPath is the path as the collector stores it (Go sanitize.URL)', () =
   expect(storedPath('/blog/post-12')).toBe('/blog/post-12')
   expect(storedPath('')).toBe('/')
 })
+
+test('a truncated URL never ends inside a multi-byte character', () => {
+  // '€' is three bytes (%E2%82%AC): a cut can leave %E2%82, valid escapes but not UTF-8.
+  for (let pad = 0; pad < 9; pad++) {
+    const url = cleanUrl('https://a.com/?' + 'p'.repeat(pad) + '=' + '€'.repeat(400), [])
+    expect(() => decodeURIComponent(url), url.slice(-12)).not.toThrow()
+  }
+})
+
+test('an address that was not cut keeps its escapes as they were', () => {
+  expect(cleanUrl('https://a.com/foo%C3', [])).toBe('https://a.com/foo%C3')
+})

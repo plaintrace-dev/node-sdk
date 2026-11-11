@@ -52,7 +52,7 @@ export function install(win: Window, overrides: Overrides = {}): Tracker | undef
   const pageUrl = queued.find((c) => c[0] === 'pageUrl')?.[1]
   // The npm package may have started one already: one tracker per page.
   const tracker =
-    (w['__px_tracker'] as Tracker | undefined) ??
+    ((w['__px_tracker'] as Tracker | undefined)?.site === opts.site ? (w['__px_tracker'] as Tracker) : undefined) ??
     createTracker({
       ...(opts as TrackerOptions),
       ...(typeof pageUrl === 'function' ? { pageUrl: pageUrl as TrackerOptions['pageUrl'] } : {}),

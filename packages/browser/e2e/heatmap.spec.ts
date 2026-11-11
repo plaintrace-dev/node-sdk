@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { events, ready, reset } from './helpers'
 
-const link = (prefix: string, api = 'http%3A%2F%2Flocalhost%3A4173') => `/fixtures/heatmap.html#pt-heatmap=${prefix}-0000-4000-8000-000000000000.1794381597515.${'a'.repeat(43)}&api=${api}`
+const link = (prefix: string, api = 'http%3A%2F%2Flocalhost%3A4173') => `/fixtures/heatmap.html#pt-heatmap=${prefix}-0000-4000-8000-000000000000.01a1bf01-4493-72f6-9c32-d6b950054b01.1794381597515.${'a'.repeat(43)}&api=${api}`
 
 test.beforeEach(({ request }) => reset(request))
 

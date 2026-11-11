@@ -16,7 +16,9 @@ export function initIn(win: Window | undefined, o: InitOptions): Tracker | undef
   if (instance) return instance
   // One tracker per page, whichever of the script tag and this package starts first.
   const w = win as unknown as { __px_tracker?: Tracker }
-  instance = w.__px_tracker ?? createTracker({ ...o, sdk: 'web-npm', version: VERSION, window: win })
+  // A tracker the script tag started for this same site (stop() removes a stopped one).
+  const shared = w.__px_tracker?.site === o.site ? w.__px_tracker : undefined
+  instance = shared ?? createTracker({ ...o, sdk: 'web-npm', version: VERSION, window: win })
   w.__px_tracker = instance
   for (const call of queue.splice(0)) call(instance)
   return instance

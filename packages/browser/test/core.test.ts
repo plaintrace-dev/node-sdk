@@ -221,7 +221,7 @@ test('heatmaps on: clicks go out with the page they were made on; off: no click 
   expect(events().filter((x) => x.type === 'click')).toHaveLength(0)
 })
 
-const TOKEN = '01a1bf01-449d-788e-bd5c-6cb404a2c214.1794381597515.' + 'a'.repeat(43)
+const TOKEN = '01a1bf01-449d-788e-bd5c-6cb404a2c214.01a1bf01-4493-72f6-9c32-d6b950054b01.1794381597515.' + 'a'.repeat(43)
 
 test('a heatmap link opens the overlay instead of measuring, and leaves no token in the address', async () => {
   config = () => new Response('{"allowed_domains":[],"redact_query_keys":[],"app_origin":"https://app.test"}', { status: 200 })
@@ -233,7 +233,7 @@ test('a heatmap link opens the overlay instead of measuring, and leaves no token
   expect(location.hash).toBe('')
   const script = [...document.querySelectorAll('script')].find((s) => s.src.includes('overlay.js'))
   expect(script?.src).toBe('https://c.test/v/0/overlay.js')
-  expect((window as any).__ptOverlay).toEqual({ token: TOKEN, api: 'https://app.test' })
+  expect((window as any).__ptOverlay).toMatchObject({ token: TOKEN, api: 'https://app.test' })
   script?.remove()
   delete (window as any).__ptOverlay
 })
@@ -275,4 +275,16 @@ test('clicks alone do not keep the visit id alive (the collector does not extend
   document.getElementById('buy')!.dispatchEvent(e)
   await vi.advanceTimersByTimeAsync(2 * 60_000)
   expect(t.visitId()).toBeNull()
+})
+
+test('the overlay asks for pages the way they were recorded, through pageUrl', async () => {
+  config = () => new Response('{"allowed_domains":[],"redact_query_keys":[],"app_origin":"https://app.test"}', { status: 200 })
+  history.replaceState(null, '', `/orders/8121#pt-heatmap=${TOKEN}&api=https%3A%2F%2Fapp.test`)
+  start({ pageUrl: (href) => href.replace(/\/orders\/\d+/, '/orders/:n') })
+  await vi.advanceTimersByTimeAsync(1_000)
+  const o = (window as any).__ptOverlay
+  expect(o.pathOf('https://a.com/orders/8121?x=1')).toBe('/orders/:n')
+  expect(o.pathOf('https://a.com/users/0d7f2c1e-8b8a-4c55-9b7e-1f2a3b4c5d6e')).toBe('/users/:id')
+  document.querySelectorAll('script').forEach((s) => s.src.includes('overlay.js') && s.remove())
+  delete (window as any).__ptOverlay
 })

@@ -47,6 +47,9 @@ export function place(cells: readonly Cell[], cellSize: number, boxOf: (selector
 
 export interface Data {
   views: number
+  /** All clicks for this page and screen; the cells stop at the busiest 5,000. */
+  total: number
+  truncated: boolean
   small: boolean
   cell_size: number
   clicks: Cell[]
@@ -65,6 +68,8 @@ export function parseData(raw: unknown): Data {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   return {
     views: num(r.views),
+    total: num(r.total),
+    truncated: r.truncated === true,
     small: r.small === true,
     cell_size: num(r.cell_size, 1, 1000) || 50,
     clicks: list(r.clicks)

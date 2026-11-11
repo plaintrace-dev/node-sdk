@@ -102,3 +102,23 @@ test('small screens are mobile, mid-size tablet', async () => {
   Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true })
   expect(got.map((g) => g.click.viewport)).toEqual(['mobile', 'tablet'])
 })
+
+test('a click that selects text did something: not dead', async () => {
+  let text = ''
+  const sel = vi.spyOn(window, 'getSelection').mockImplementation(() => ({ isCollapsed: text === '', toString: () => text }) as unknown as Selection)
+  start()
+  click('price')
+  text = '€9' // the click (a double click, a drag) selected the price
+  await vi.advanceTimersByTimeAsync(1_000)
+  expect(got[0]!.click.dead).toBe(false)
+  sel.mockRestore()
+})
+
+test('text already selected before the click does not hide a dead click', async () => {
+  const sel = vi.spyOn(window, 'getSelection').mockReturnValue({ isCollapsed: false, toString: () => 'earlier', rangeCount: 1, getRangeAt: () => ({ startContainer: document.body, startOffset: 0, endContainer: document.body, endOffset: 1 }) } as unknown as Selection)
+  start()
+  click('price')
+  await vi.advanceTimersByTimeAsync(1_000)
+  expect(got[0]!.click.dead).toBe(true)
+  sel.mockRestore()
+})

@@ -45,6 +45,24 @@ function segment(raw: string): string {
   return digits(s) >= 9 || UUID.test(s) || TOKEN.test(s) || EMAIL_SEGMENT.test(s) ? ':id' : raw
 }
 
+/* A cut can end inside a multi-byte character (%E2%82 of %E2%82%AC): valid escapes that do not
+   decode. Only the trailing escapes are looked at; anything earlier is left as it was. */
+function dropPartialUtf8(s: string): string {
+  const tail = s.match(/(?:%[0-9A-Fa-f]{2}){1,3}$/)?.[0]
+  if (!tail) return s
+  const bytes = tail.slice(1).split('%').map((h) => parseInt(h, 16))
+  for (let i = bytes.length - 1; i >= 0; i--) {
+    const b = bytes[i]!
+    if (b < 0x80) return s // plain ASCII: nothing open
+    if (b >= 0xc0) {
+      const need = b >= 0xf0 ? 4 : b >= 0xe0 ? 3 : 2
+      const have = bytes.length - i
+      return have < need ? s.slice(0, s.length - 3 * have) : s
+    }
+  }
+  return s
+}
+
 /** A page URL without fragment, credentials, sensitive parameters or ids in its path; '' when not http(s). */
 export function cleanUrl(href: string, extraKeys: readonly string[]): string {
   let u: URL
@@ -65,7 +83,9 @@ export function cleanUrl(href: string, extraKeys: readonly string[]): string {
   const query = kept.toString()
   u.search = query
   // A cut can land inside a %-escape: drop the broken tail.
-  return truncate(u.toString(), URL_MAX).replace(/%[0-9A-Fa-f]?$/, '')
+  const full = u.toString()
+  // Only a cut can leave a broken escape; an address that fits is kept exactly as it is.
+  return full.length <= URL_MAX ? full : dropPartialUtf8(truncate(full, URL_MAX).replace(/%[0-9A-Fa-f]?$/, ''))
 }
 
 /** The path as the collector stores it (Go sanitize.URL): each segment decoded, ids as ":id".

@@ -3,7 +3,7 @@ import { createEngagement } from './engagement.js'
 import { createClicks } from './heatmap.js'
 import { watchNavigation, type NavKind } from './navigation.js'
 import { applyIgnoreHash, createPrivacy, localStore, memoryStore, type Consent } from './privacy.js'
-import { cleanProps, cleanTitle, cleanUrl, isValidName } from './sanitize.js'
+import { cleanProps, cleanTitle, cleanUrl, isValidName, storedPath } from './sanitize.js'
 import { createTransport, type OutEvent } from './transport.js'
 import { uuidV7 } from './uuid.js'
 
@@ -46,14 +46,16 @@ export interface Tracker {
   flush(): void
   stop(): void
   readonly version: string
+  /** The site this tracker counts for. */
+  readonly site: string
 }
 
 const excluded = (path: string, patterns: readonly string[]) =>
   patterns.some((p) => (p.endsWith('*') ? path.startsWith(p.slice(0, -1)) : path === p))
 
-function inert(version: string): Tracker {
+function inert(version: string, site: string): Tracker {
   const noop = () => {}
-  return { track: noop, conversion: noop, identify: noop, pageview: noop, consent: noop, visitId: () => null, flush: noop, stop: noop, version }
+  return { track: noop, conversion: noop, identify: noop, pageview: noop, consent: noop, visitId: () => null, flush: noop, stop: noop, version, site }
 }
 
 /** "#pt-heatmap=<token>&api=<dashboard API>" in the address: taken out of it at once so it is
@@ -63,8 +65,8 @@ function overlayLink(win: Window): { token: string; api: string } | null {
   const raw = hash.match(/(?:^#|&)pt-heatmap=([^&]*)/)?.[1]
   if (raw === undefined) return null
   win.history.replaceState(win.history.state, '', win.location.pathname + win.location.search)
-  // <site uuid>.<expiry ms>.<base64url HMAC-SHA256>, as the API issues it.
-  const token = /^[0-9a-f-]{36}\.\d{10,16}\.[\w-]{43}$/.test(raw) ? raw : null
+  // <site uuid>.<user uuid>.<expiry ms>.<base64url HMAC-SHA256>, as the API issues it.
+  const token = /^[0-9a-f-]{36}\.[0-9a-f-]{36}\.\d{10,16}\.[\w-]{43}$/.test(raw) ? raw : null
   if (!token) return null
   try {
     const api = new URL(decodeURIComponent(hash.match(/(?:^#|&)api=([^&]+)/)?.[1] ?? ''))
@@ -75,7 +77,7 @@ function overlayLink(win: Window): { token: string; api: string } | null {
   }
 }
 
-function openOverlay(win: Window, endpoint: string, version: string, link: { token: string; api: string }) {
+function openOverlay(win: Window, endpoint: string, version: string, link: { token: string; api: string; pathOf: (href: string) => string }) {
   ;(win as unknown as { __ptOverlay?: typeof link }).__ptOverlay = link
   const s = win.document.createElement('script')
   s.async = true
@@ -93,12 +95,17 @@ export function createTracker(o: TrackerOptions): Tracker {
     // Only the site's own dashboard: a crafted link naming another API opens nothing.
     const endpoint = new URL(o.endpoint, win.location.href).href.replace(/\/+$/, '')
     void loadConfig(endpoint, o.site, o.fetchImpl ?? ((input, init) => win.fetch(input, init))).then((c) => {
-      if (c && c !== 'unknown_site' && c.appOrigin !== '' && c.appOrigin === overlay.api) openOverlay(win, o.endpoint, o.version, overlay)
+      // The overlay asks for each page the way this tracker recorded it: through pageUrl, cleaned.
+      const pathOf = (href: string) => {
+        const url = cleanUrl(o.pageUrl ? o.pageUrl(href) : href, [])
+        return storedPath(url ? new URL(url).pathname : new URL(href).pathname)
+      }
+      if (c && c !== 'unknown_site' && c.appOrigin !== '' && c.appOrigin === overlay.api) openOverlay(win, o.endpoint, o.version, { ...overlay, pathOf })
     })
-    return inert(o.version)
+    return inert(o.version, o.site)
   }
   // WebDriver clients (Playwright, Puppeteer, Selenium, Lighthouse) are tests and scrapers.
-  if ((win.navigator as Navigator & { webdriver?: boolean }).webdriver && !o.debug) return inert(o.version)
+  if ((win.navigator as Navigator & { webdriver?: boolean }).webdriver && !o.debug) return inert(o.version, o.site)
 
   const store = o.storage === 'none' ? memoryStore() : localStore()
   applyIgnoreHash(win, store)
@@ -204,9 +211,13 @@ export function createTracker(o: TrackerOptions): Tracker {
     else left = false
   }
 
+  let self: Tracker | undefined
   const stop = () => {
     if (stopped) return
     stopped = true
+    // A stopped tracker is no one's to reuse.
+    const shared = win as unknown as { __px_tracker?: Tracker }
+    if (shared.__px_tracker === self) delete shared.__px_tracker
     nav?.stop()
     engagement.stop()
     clicks?.stop()
@@ -248,7 +259,7 @@ export function createTracker(o: TrackerOptions): Tracker {
   win.addEventListener('pagehide', leave)
   nav = watchNavigation(win, onPage)
 
-  return {
+  self = {
     track(name, props) {
       if (isValidName(name)) emit({ type: 'custom_event', name, props: cleanProps(props, redactKeys) })
     },
@@ -270,5 +281,7 @@ export function createTracker(o: TrackerOptions): Tracker {
     flush: () => transport.flush(),
     stop,
     version: o.version,
+    site: o.site,
   }
+  return self
 }

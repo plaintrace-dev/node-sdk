@@ -25,13 +25,15 @@ createServer(async (req, res) => {
   if (/^\/(v\/[^/]+\/)?overlay\.js$/.test(url.pathname)) return send(200, await readFile(join(root, '../dist/overlay.js')), 'text/javascript')
   // The dashboard API's overlay endpoint: '#buy' is on the page, '#gone' is not.
   if (url.pathname === '/v1/heatmaps/data') {
-    const token = url.searchParams.get('token') ?? ''
+    // As the real API: the token comes in a header, never in the address.
+    if (url.searchParams.has('token')) return send(401, '{}')
+    const token = req.headers['x-heatmap-token'] ?? ''
     if (token.startsWith('00000000')) return send(401, '{}') // an expired link
     if (token.startsWith('eeeeeeee')) // hostile data: must never become HTML on the page
       return send(200, JSON.stringify({ views: '<img src=x onerror="window.__xss=1">', small: false, cell_size: 50,
         clicks: [{ selector: '<img src=x onerror="window.__xss=2">', cx: 1, cy: 1, count: 3 }], elements: [], scroll_reach: [] }))
     return send(200, JSON.stringify({
-      views: 40, small: false, cell_size: 50,
+      views: 40, total: 8, truncated: false, small: false, cell_size: 50,
       clicks: [{ selector: '#buy', cx: 10, cy: 10, count: 6 }, { selector: '#gone', cx: 0, cy: 0, count: 2 }],
       elements: [{ selector: '#buy', clicks: 6, rage: 2, dead: 0 }, { selector: '#gone', clicks: 2, rage: 0, dead: 0 }],
       scroll_reach: [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1],

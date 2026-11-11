@@ -10,7 +10,7 @@ import { parseData, place, type Box, type Data } from './place.js'
 type Layer = 'clicks' | 'rage' | 'dead' | 'scroll'
 
 
-function start({ token, api }: { token: string; api: string }) {
+function start({ token, api, pathOf }: { token: string; api: string; pathOf?: (href: string) => string }) {
   const doc = document
   const host = doc.createElement('pt-heatmap')
   host.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;z-index:2147483646;pointer-events:none'
@@ -41,7 +41,8 @@ function start({ token, api }: { token: string; api: string }) {
   const layers = new Set<Layer>(['clicks', 'rage', 'dead', 'scroll'])
   let data: Data | null = null
   // The path as it was recorded (ids as :id, segments decoded), not the raw address.
-  let path = storedPath(location.pathname)
+  const here = () => (pathOf ? pathOf(location.href) : storedPath(location.pathname))
+  let path = here()
   let timer = 0
 
   const pageBox = (selector: string): Box | null => {
@@ -72,7 +73,8 @@ function start({ token, api }: { token: string; api: string }) {
       if (!b) continue
       kinds.forEach((t, i) => mark(`${t} ${e[t]}`, `badge ${t}`, b.left + b.width - 4 - i * 56, b.top - 10))
     }
-    const total = p.placed + p.unplaced
+    const drawn = p.placed + p.unplaced
+    const total = Math.max(data.total, drawn)
     // Built from nodes and text only: nothing from the API is ever parsed as HTML.
     const para = (cls: string, ...parts: (string | [string])[]) => {
       const el = doc.createElement('p')
@@ -89,12 +91,13 @@ function start({ token, api }: { token: string; api: string }) {
     }
     stats.replaceChildren(para('', [String(total)], ' clicks · ', [String(data.views)], ' page views'))
     if (data.small) stats.append(para('warn', 'Small sample: under 30 page views, shares can swing widely.'))
+    if (data.truncated) stats.append(para('', 'Showing the busiest 5,000 spots.'))
     if (p.unplaced > 0) {
       const details = doc.createElement('details')
       const summary = doc.createElement('summary')
       const b = doc.createElement('b')
-      b.textContent = `${Math.round((p.unplaced / total) * 100)}%`
-      summary.append(b, ' of clicks are not on this page as it is now')
+      b.textContent = `${Math.round((p.unplaced / drawn) * 100)}%`
+      summary.append(b, data.truncated ? ' of the clicks shown are not on this page as it is now' : ' of clicks are not on this page as it is now')
       const ul = doc.createElement('ul')
       for (const m of p.missing.slice(0, 12)) {
         const li = doc.createElement('li')
@@ -105,7 +108,9 @@ function start({ token, api }: { token: string; api: string }) {
       }
       details.append(summary, ul)
       stats.append(details)
-    } else stats.append(total > 0 ? para('ok', 'Every click is placed on this page as it is now.') : para('', 'No clicks recorded yet for this screen size.'))
+    } else if (total === 0) stats.append(para('', 'No clicks recorded yet for this screen size.'))
+    // Beyond the busiest spots nothing was checked: say only what is known.
+    else stats.append(para('ok', data.truncated ? 'Every spot shown is placed on this page as it is now.' : 'Every click is placed on this page as it is now.'))
   }
 
   const mark = (text: string, cls: string, x: number, y: number) => {
@@ -127,8 +132,9 @@ function start({ token, api }: { token: string; api: string }) {
     stats.textContent = 'Loading…'
     $<HTMLSpanElement>('.path').textContent = path
     try {
-      const q = new URLSearchParams({ token, path, viewport: vp.value as Viewport })
-      const res = await fetch(`${api}/v1/heatmaps/data?${q}`, { credentials: 'omit' })
+      // The token goes in a header: an address ends up in access logs.
+      const q = new URLSearchParams({ path, viewport: vp.value as Viewport })
+      const res = await fetch(`${api}/v1/heatmaps/data?${q}`, { credentials: 'omit', headers: { 'X-Heatmap-Token': token } })
       if (res.status === 401) throw new Error('This heatmap link has expired. Open it again from the dashboard.')
       if (!res.ok) throw new Error(res.status === 403 ? 'This page is not on one of the site\'s domains.' : 'The heatmap could not be loaded.')
       data = parseData(await res.json())
@@ -156,8 +162,8 @@ function start({ token, api }: { token: string; api: string }) {
   addEventListener('resize', redraw)
   // An SPA route change shows another page: load its heatmap.
   const route = setInterval(() => {
-    if (storedPath(location.pathname) !== path) {
-      path = storedPath(location.pathname)
+    if (here() !== path) {
+      path = here()
       void load()
     }
   }, 1_000)
@@ -239,5 +245,5 @@ a{color:#a5b4fc}
 `
 
 // Last: everything above (the styles included) must exist before the overlay starts.
-const link = (window as unknown as { __ptOverlay?: { token: string; api: string } }).__ptOverlay
+const link = (window as unknown as { __ptOverlay?: { token: string; api: string; pathOf?: (href: string) => string } }).__ptOverlay
 if (link) start(link)
