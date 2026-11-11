@@ -1,5 +1,6 @@
 import { hostAllowed, loadConfig } from './config.js'
 import { createEngagement } from './engagement.js'
+import { createClicks } from './heatmap.js'
 import { watchNavigation, type NavKind } from './navigation.js'
 import { applyIgnoreHash, createPrivacy, localStore, memoryStore, type Consent } from './privacy.js'
 import { cleanProps, cleanTitle, cleanUrl, isValidName } from './sanitize.js'
@@ -55,10 +56,47 @@ function inert(version: string): Tracker {
   return { track: noop, conversion: noop, identify: noop, pageview: noop, consent: noop, visitId: () => null, flush: noop, stop: noop, version }
 }
 
+/** "#pt-heatmap=<token>&api=<dashboard API>" in the address: taken out of it at once so it is
+    never shared or recorded. Null when absent, or when the API is not https (or localhost). */
+function overlayLink(win: Window): { token: string; api: string } | null {
+  const hash = win.location.hash
+  const raw = hash.match(/(?:^#|&)pt-heatmap=([^&]*)/)?.[1]
+  if (raw === undefined) return null
+  win.history.replaceState(win.history.state, '', win.location.pathname + win.location.search)
+  // <site uuid>.<expiry ms>.<base64url HMAC-SHA256>, as the API issues it.
+  const token = /^[0-9a-f-]{36}\.\d{10,16}\.[\w-]{43}$/.test(raw) ? raw : null
+  if (!token) return null
+  try {
+    const api = new URL(decodeURIComponent(hash.match(/(?:^#|&)api=([^&]+)/)?.[1] ?? ''))
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(api.hostname)
+    return api.protocol === 'https:' || (api.protocol === 'http:' && local) ? { token, api: api.origin } : null
+  } catch {
+    return null
+  }
+}
+
+function openOverlay(win: Window, endpoint: string, version: string, link: { token: string; api: string }) {
+  ;(win as unknown as { __ptOverlay?: typeof link }).__ptOverlay = link
+  const s = win.document.createElement('script')
+  s.async = true
+  s.src = new URL(`${endpoint.replace(/\/+$/, '')}/v/${version}/overlay.js`, win.location.href).href
+  win.document.head.appendChild(s)
+}
+
 export function createTracker(o: TrackerOptions): Tracker {
   const win = o.window ?? window
   const doc = win.document
   const now = () => Date.now()
+  // The owner opened their page from the dashboard's heatmap: show it, measure nothing.
+  const overlay = overlayLink(win)
+  if (overlay) {
+    // Only the site's own dashboard: a crafted link naming another API opens nothing.
+    const endpoint = new URL(o.endpoint, win.location.href).href.replace(/\/+$/, '')
+    void loadConfig(endpoint, o.site, o.fetchImpl ?? ((input, init) => win.fetch(input, init))).then((c) => {
+      if (c && c !== 'unknown_site' && c.appOrigin !== '' && c.appOrigin === overlay.api) openOverlay(win, o.endpoint, o.version, overlay)
+    })
+    return inert(o.version)
+  }
   // WebDriver clients (Playwright, Puppeteer, Selenium, Lighthouse) are tests and scrapers.
   if ((win.navigator as Navigator & { webdriver?: boolean }).webdriver && !o.debug) return inert(o.version)
 
@@ -100,7 +138,7 @@ export function createTracker(o: TrackerOptions): Tracker {
     onDelivery: o.debug ? (events, problem) => console.info('[px]', problem ?? 'delivered', events) : undefined,
   })
 
-  const page = (): OutEvent['page'] => {
+  const page = (): NonNullable<OutEvent['page']> => {
     const href = win.location.href
     const url = cleanUrl(o.pageUrl ? o.pageUrl(href) : href, redactKeys)
     return doc.title ? { url, title: cleanTitle(doc.title) } : { url }
@@ -111,11 +149,13 @@ export function createTracker(o: TrackerOptions): Tracker {
   const emit = (e: Omit<OutEvent, 'event_id' | 'occurred_at'>, immediate = false, path?: string) => {
     if (e.type !== 'page_view') nav?.settle()
     if (!may(path)) return
-    lastEventAt = now()
+    // The collector does not extend a visit for clicks: neither may the visit id here.
+    if (e.type !== 'click') lastEventAt = now()
     transport.enqueue({ event_id: uuidV7(), occurred_at: new Date(lastEventAt).toISOString(), page: page(), ...e }, immediate)
   }
 
   const engagement = createEngagement(win)
+  let clicks: ReturnType<typeof createClicks> | undefined
   const sendEngagement = () => {
     const sample = engagement.collect()
     // The page being left: the address may already be the next page's.
@@ -124,6 +164,7 @@ export function createTracker(o: TrackerOptions): Tracker {
 
   const onPage = (kind: NavKind) => {
     left = false
+    clicks?.newPage()
     if (kind === 'restore') engagement.collect() // the time before leaving went out at pagehide
     else sendEngagement()
     if (!may()) {
@@ -155,6 +196,7 @@ export function createTracker(o: TrackerOptions): Tracker {
     if (left) return
     left = true
     sendEngagement()
+    clicks?.flushPending()
     transport.flush(true)
   }
   const onVisibility = () => {
@@ -167,6 +209,7 @@ export function createTracker(o: TrackerOptions): Tracker {
     stopped = true
     nav?.stop()
     engagement.stop()
+    clicks?.stop()
     doc.removeEventListener('visibilitychange', onVisibility)
     win.removeEventListener('pagehide', leave)
     transport.cancel()
@@ -193,6 +236,8 @@ export function createTracker(o: TrackerOptions): Tracker {
         warn(`${win.location.hostname} is not one of this site's domains; nothing is sent`)
         return stop()
       }
+      // The page and path are taken at the click: an SPA may move on before the click is reported.
+      if (c.heatmaps) clicks = createClicks(win, (r) => emit({ type: 'click', page: r.page, click: r.click }, false, r.path), page)
     }
     release()
   })

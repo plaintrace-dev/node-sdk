@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { cleanProps, cleanTitle, cleanUrl, isValidName } from '../src/sanitize.js'
+import { cleanProps, cleanTitle, cleanUrl, isValidName, storedPath } from '../src/sanitize.js'
 
 // The same inputs and expected values as the collector's Go tests (internal/sanitize):
 // both sides apply one rule, so data is already clean before it leaves the browser.
@@ -48,4 +48,13 @@ test('isValidName', () => {
   expect(isValidName('9 bad')).toBe(false)
   expect(isValidName('a'.repeat(65))).toBe(false)
   expect(isValidName(42)).toBe(false)
+})
+
+test('storedPath is the path as the collector stores it (Go sanitize.URL)', () => {
+  expect(storedPath('/orders/123456789/items')).toBe('/orders/:id/items')
+  expect(storedPath('/users/0d7f2c1e-8b8a-4c55-9b7e-1f2a3b4c5d6e')).toBe('/users/:id')
+  expect(storedPath('/caf%C3%A9')).toBe('/café')
+  expect(storedPath('/u/ali@x.com')).toBe('/u/:id')
+  expect(storedPath('/blog/post-12')).toBe('/blog/post-12')
+  expect(storedPath('')).toBe('/')
 })

@@ -51,7 +51,8 @@ test('localStore falls back to memory when storage refuses writes', () => {
 describe('config', () => {
   const ok = (body: unknown, status = 200) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch
   test('loads site settings', async () => {
-    expect(await loadConfig('https://c.test', 's', ok({ allowed_domains: ['a.com'], redact_query_keys: ['ref'] }))).toEqual({ allowedDomains: ['a.com'], redactQueryKeys: ['ref'] })
+    expect(await loadConfig('https://c.test', 's', ok({ allowed_domains: ['a.com'], redact_query_keys: ['ref'] }))).toEqual({ allowedDomains: ['a.com'], redactQueryKeys: ['ref'], heatmaps: false, appOrigin: '' })
+    expect(await loadConfig('https://c.test', 's', ok({ heatmaps: true }))).toMatchObject({ heatmaps: true })
   })
   test('unknown site and failures', async () => {
     expect(await loadConfig('https://c.test', 's', ok({}, 404))).toBe('unknown_site')

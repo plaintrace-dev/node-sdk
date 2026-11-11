@@ -77,3 +77,11 @@ test('the versioned script path is proxied', async () => {
   expect(f.calls[0]!.url).toBe(`${ENDPOINT}/v/0.1.0/t.js`)
   expect(await client.proxy(new Request('https://a.com/_i/v/latest/t.js'))).toBeNull()
 })
+
+test('the heatmap overlay is proxied too, so a proxied site can open its heatmap', async () => {
+  const f = fakeFetch(() => new Response('/*js*/', { status: 200, headers: { 'content-type': 'text/javascript' } }))
+  const client = createClient({ key: KEY, endpoint: ENDPOINT, fetch: f.fn })
+  expect((await client.proxy(new Request('https://a.com/_i/v/0.2.0/overlay.js')))?.status).toBe(200)
+  expect(f.calls[0]!.url).toBe(`${ENDPOINT}/v/0.2.0/overlay.js`)
+  expect((await client.proxy(new Request('https://a.com/_i/overlay.js')))?.status).toBe(200)
+})

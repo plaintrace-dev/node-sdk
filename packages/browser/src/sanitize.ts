@@ -68,6 +68,23 @@ export function cleanUrl(href: string, extraKeys: readonly string[]): string {
   return truncate(u.toString(), URL_MAX).replace(/%[0-9A-Fa-f]?$/, '')
 }
 
+/** The path as the collector stores it (Go sanitize.URL): each segment decoded, ids as ":id".
+    The heatmap overlay asks for this, so its data matches what was recorded. */
+export function storedPath(pathname: string): string {
+  const path = pathname
+    .split('/')
+    .map((raw) => {
+      if (raw === '') return raw
+      let s = raw
+      try {
+        s = decodeURIComponent(raw)
+      } catch {}
+      return digits(s) >= 9 || UUID.test(s) || TOKEN.test(s) || EMAIL_SEGMENT.test(s) ? ':id' : s
+    })
+    .join('/')
+  return truncate(path, URL_MAX) || '/'
+}
+
 export function cleanTitle(s: string): string {
   return truncate(redactText(s), TITLE_MAX)
 }

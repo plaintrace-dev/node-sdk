@@ -1,6 +1,10 @@
 export interface SiteConfig {
   readonly allowedDomains: string[]
   readonly redactQueryKeys: string[]
+  /** The owner turned heatmaps on: clicks are recorded. */
+  readonly heatmaps: boolean
+  /** The dashboard's origin: the only API the heatmap overlay may read from ('' when unset). */
+  readonly appOrigin: string
 }
 
 /** The site's collection settings; 'unknown_site' when the collector does not know it, null
@@ -10,9 +14,9 @@ export async function loadConfig(endpoint: string, site: string, fetchImpl: type
     const res = await fetchImpl(`${endpoint}/v1/config?site=${encodeURIComponent(site)}`, { credentials: 'omit', mode: 'cors' })
     if (res.status === 404) return 'unknown_site'
     if (!res.ok) return null
-    const body = (await res.json()) as { allowed_domains?: unknown; redact_query_keys?: unknown }
+    const body = (await res.json()) as { allowed_domains?: unknown; redact_query_keys?: unknown; heatmaps?: unknown; app_origin?: unknown }
     const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
-    return { allowedDomains: strings(body.allowed_domains), redactQueryKeys: strings(body.redact_query_keys) }
+    return { allowedDomains: strings(body.allowed_domains), redactQueryKeys: strings(body.redact_query_keys), heatmaps: body.heatmaps === true, appOrigin: typeof body.app_origin === 'string' ? body.app_origin : '' }
   } catch {
     return null
   }

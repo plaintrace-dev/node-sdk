@@ -2,7 +2,7 @@ import { authHeaders, report, type Context } from './context.js'
 import { ClientError } from './errors.js'
 
 export const DEFAULT_PREFIX = '/_i'
-const PATHS = [/^\/t\.js$/, /^\/t-[a-z\d-]+\.js$/, /^\/v\/\d+\.\d+\.\d+\/t\.js$/, /^\/v1\/events$/, /^\/v1\/config$/, /^\/v1\/sdk$/]
+const PATHS = [/^\/t\.js$/, /^\/t-[a-z\d-]+\.js$/, /^\/v\/\d+\.\d+\.\d+\/t\.js$/, /^\/overlay\.js$/, /^\/v\/\d+\.\d+\.\d+\/overlay\.js$/, /^\/v1\/events$/, /^\/v1\/config$/, /^\/v1\/sdk$/]
 const METHODS = new Set(['GET', 'HEAD', 'POST'])
 const MAX_BODY = 1024 * 1024
 const NULL_BODY = new Set([204, 205, 304])

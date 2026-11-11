@@ -1,7 +1,7 @@
 /** One event as the collector's /v1/events takes it. */
 export interface OutEvent {
   readonly event_id: string
-  readonly type: 'page_view' | 'custom_event' | 'conversion' | 'identify' | 'engagement'
+  readonly type: 'page_view' | 'custom_event' | 'conversion' | 'identify' | 'engagement' | 'click'
   readonly occurred_at: string
   readonly page?: { readonly url: string; readonly title?: string }
   readonly referrer?: string
@@ -10,6 +10,7 @@ export interface OutEvent {
   readonly external_user_id?: string
   readonly navigation?: 'load' | 'soft' | 'restore' | 'prerender'
   readonly engagement?: { readonly active_ms: number; readonly visible_ms: number; readonly scroll_depth: number }
+  readonly click?: { readonly selector: string; readonly x: number; readonly y: number; readonly viewport: 'desktop' | 'tablet' | 'mobile'; readonly rage: boolean; readonly dead: boolean }
 }
 
 export interface TransportOptions {

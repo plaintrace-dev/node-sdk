@@ -21,7 +21,22 @@ createServer(async (req, res) => {
     res.end(body)
   }
   if (url.pathname === '/t.js') return send(200, await readFile(join(root, '../dist/t.js')), 'text/javascript')
-  if (url.pathname === '/v1/config') return send(200, '{"allowed_domains":[],"redact_query_keys":[]}')
+  if (url.pathname === '/v1/config') return send(200, JSON.stringify({ allowed_domains: [], redact_query_keys: [], heatmaps: url.searchParams.get('site') === 'heat', app_origin: `http://localhost:${port}` }))
+  if (/^\/(v\/[^/]+\/)?overlay\.js$/.test(url.pathname)) return send(200, await readFile(join(root, '../dist/overlay.js')), 'text/javascript')
+  // The dashboard API's overlay endpoint: '#buy' is on the page, '#gone' is not.
+  if (url.pathname === '/v1/heatmaps/data') {
+    const token = url.searchParams.get('token') ?? ''
+    if (token.startsWith('00000000')) return send(401, '{}') // an expired link
+    if (token.startsWith('eeeeeeee')) // hostile data: must never become HTML on the page
+      return send(200, JSON.stringify({ views: '<img src=x onerror="window.__xss=1">', small: false, cell_size: 50,
+        clicks: [{ selector: '<img src=x onerror="window.__xss=2">', cx: 1, cy: 1, count: 3 }], elements: [], scroll_reach: [] }))
+    return send(200, JSON.stringify({
+      views: 40, small: false, cell_size: 50,
+      clicks: [{ selector: '#buy', cx: 10, cy: 10, count: 6 }, { selector: '#gone', cx: 0, cy: 0, count: 2 }],
+      elements: [{ selector: '#buy', clicks: 6, rage: 2, dead: 0 }, { selector: '#gone', clicks: 2, rage: 0, dead: 0 }],
+      scroll_reach: [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1],
+    }))
+  }
   if (url.pathname === '/v1/events' && req.method === 'POST') {
     batches.push(JSON.parse(await read(req)))
     return send(202, '{"visit_id":"v.sig","accepted":1,"rejected":[]}')

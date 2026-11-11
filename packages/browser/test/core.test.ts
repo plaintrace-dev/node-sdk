@@ -198,3 +198,81 @@ test('consent granted while the page is still prerendering counts it once, when 
     delete (document as any).prerendering
   }
 })
+
+test('heatmaps on: clicks go out with the page they were made on; off: no click events', async () => {
+  config = () => new Response('{"allowed_domains":[],"redact_query_keys":[],"heatmaps":true}', { status: 200 })
+  document.body.innerHTML = '<button id="buy">Buy</button>'
+  start()
+  await vi.advanceTimersByTimeAsync(3_100)
+  const e = new MouseEvent('click', { bubbles: true, clientX: 1, clientY: 1 })
+  Object.defineProperty(e, 'isTrusted', { value: true })
+  document.getElementById('buy')!.dispatchEvent(e)
+  await vi.advanceTimersByTimeAsync(3_000)
+  const clicks = events().filter((x) => x.type === 'click')
+  expect(clicks).toHaveLength(1)
+  expect(clicks[0]).toMatchObject({ page: { url: 'https://a.com/pricing?plan=pro' }, click: { selector: '#buy' } })
+  for (const t of trackers) t.stop()
+  calls = []
+  config = () => new Response('{"allowed_domains":[],"redact_query_keys":[]}', { status: 200 })
+  start()
+  await vi.advanceTimersByTimeAsync(3_100)
+  document.getElementById('buy')!.dispatchEvent(e)
+  await vi.advanceTimersByTimeAsync(3_000)
+  expect(events().filter((x) => x.type === 'click')).toHaveLength(0)
+})
+
+const TOKEN = '01a1bf01-449d-788e-bd5c-6cb404a2c214.1794381597515.' + 'a'.repeat(43)
+
+test('a heatmap link opens the overlay instead of measuring, and leaves no token in the address', async () => {
+  config = () => new Response('{"allowed_domains":[],"redact_query_keys":[],"app_origin":"https://app.test"}', { status: 200 })
+  history.replaceState(null, '', `/pricing#pt-heatmap=${TOKEN}&api=https%3A%2F%2Fapp.test`)
+  const t = start()
+  t.track('x')
+  await vi.advanceTimersByTimeAsync(5_000)
+  expect(calls).toHaveLength(0)
+  expect(location.hash).toBe('')
+  const script = [...document.querySelectorAll('script')].find((s) => s.src.includes('overlay.js'))
+  expect(script?.src).toBe('https://c.test/v/0/overlay.js')
+  expect((window as any).__ptOverlay).toEqual({ token: TOKEN, api: 'https://app.test' })
+  script?.remove()
+  delete (window as any).__ptOverlay
+})
+
+test('a heatmap link pointing at a non-https API is ignored', async () => {
+  history.replaceState(null, '', '/pricing#pt-heatmap=s1.123.sig&api=http%3A%2F%2Fevil.test')
+  start()
+  await vi.advanceTimersByTimeAsync(5_000)
+  expect([...document.querySelectorAll('script')].some((s) => s.src.includes('overlay.js'))).toBe(false)
+  expect(events().map((e) => e.type)).toContain('page_view')
+})
+
+test('a heatmap link naming another API than the site\'s dashboard opens nothing', async () => {
+  config = () => new Response('{"allowed_domains":[],"redact_query_keys":[],"app_origin":"https://app.test"}', { status: 200 })
+  history.replaceState(null, '', `/pricing#pt-heatmap=${TOKEN}&api=https%3A%2F%2Fevil.test`)
+  start()
+  await vi.advanceTimersByTimeAsync(5_000)
+  expect([...document.querySelectorAll('script')].some((s) => s.src.includes('overlay.js'))).toBe(false)
+  expect(location.hash).toBe('')
+})
+
+test('a heatmap link with a malformed token opens nothing', async () => {
+  config = () => new Response('{"allowed_domains":[],"redact_query_keys":[],"app_origin":"https://app.test"}', { status: 200 })
+  history.replaceState(null, '', '/pricing#pt-heatmap=x&api=https%3A%2F%2Fapp.test')
+  start()
+  await vi.advanceTimersByTimeAsync(5_000)
+  expect([...document.querySelectorAll('script')].some((s) => s.src.includes('overlay.js'))).toBe(false)
+})
+
+test('clicks alone do not keep the visit id alive (the collector does not extend a visit for them)', async () => {
+  config = () => new Response('{"allowed_domains":[],"redact_query_keys":[],"heatmaps":true}', { status: 200 })
+  document.body.innerHTML = '<button id="buy">Buy</button>'
+  const t = start()
+  await vi.advanceTimersByTimeAsync(3_100)
+  expect(t.visitId()).toBe('v1.sig')
+  await vi.advanceTimersByTimeAsync(29 * 60_000)
+  const e = new MouseEvent('click', { bubbles: true })
+  Object.defineProperty(e, 'isTrusted', { value: true })
+  document.getElementById('buy')!.dispatchEvent(e)
+  await vi.advanceTimersByTimeAsync(2 * 60_000)
+  expect(t.visitId()).toBeNull()
+})

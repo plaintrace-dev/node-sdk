@@ -60,12 +60,22 @@ track('signup', { plan: 'pro' })
   Reports compare only full loads with what your server saw, to measure what ad blockers lose.
 - **Engagement** when the visitor leaves a page: time visible, time interacting, deepest scroll.
 - **Your events**: names `[A-Za-z0-9][A-Za-z0-9_.:-]`, up to 64 characters; up to 32
-  properties of string (256 chars), number, boolean or null.
+  properties of string (256 chars), number or boolean (nulls are dropped).
+- **Clicks, only when the site's owner turns heatmaps on** (Settings → Collection): the clicked
+  element as a stable selector, the position inside it (0–1000), the screen size class, and
+  whether it was a rage click (three in one spot within 700 ms) or a dead click (nothing changed
+  for a second). Never the text clicked on (buttons and links are told apart by a hash of their
+  text), never a field's value. Password and card fields, and anything inside an element with
+  `data-pt-ignore`, are never recorded. At most 50 clicks per page view; no visit or visitor id.
 
 Before anything leaves the browser, the fragment and credentials are removed from addresses,
 sensitive parameters (`token`, `email`, `password`, … and your site's own list) are dropped,
 emails and long digit runs become `[redacted]`, and ids in paths (`/users/<uuid>`) become
 `:id`. The collector applies the same rules again for any other sender.
+
+Opening a page from the dashboard's Heatmaps tab adds `#pt-heatmap=…` to its address: the
+tracker then measures nothing, removes the token from the address, and loads the overlay
+(`/v/<version>/overlay.js`, about 4 KB gzip) that draws the clicks on the page.
 
 Add `#px-ignore` to any address on your site to stop counting your own browser
 (`#px-unignore` to undo). Automated browsers (Playwright, Puppeteer, Selenium) are not
