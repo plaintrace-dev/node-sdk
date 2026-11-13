@@ -36,13 +36,34 @@ function isRedactedKey(key: string, extra: readonly string[]): boolean {
   return DEFAULT_KEYS.has(k) || SENSITIVE.test(k) || extra.some((e) => e.toLowerCase() === k)
 }
 
+const SLUG = /^[a-z0-9]+([-_][a-z0-9]+)+$/
+const CONSONANTS = /[b-df-hj-np-tv-xz]{5,}/
+
+/* A long readable page name ("resize-for-instagram-post") is not a token: lowercase words joined by - or _,
+   each at most 16 characters, without the letter-digit back-and-forth of random strings ("base64" and
+   "1920x1080" pass, "k3j4h5g6" does not) and without five consonants in a row; and not a chunked code
+   (three or more words of the same length, "ab3k-9xqz-mm2p"). Same rule as the collector's isSlug. */
+function isSlug(s: string): boolean {
+  if (!SLUG.test(s)) return false
+  const words = s.split(/[-_]/)
+  if (words.length >= 3 && words.every((w) => w.length === words[0]!.length)) return false
+  return words.every((w) => {
+    if (w.length > 16 || CONSONANTS.test(w)) return false
+    let flips = 0
+    for (let i = 1; i < w.length; i++) if (/\d/.test(w[i]!) !== /\d/.test(w[i - 1]!)) flips++
+    return flips <= 2
+  })
+}
+
+const isId = (s: string): boolean => digits(s) >= 9 || UUID.test(s) || (TOKEN.test(s) && !isSlug(s)) || EMAIL_SEGMENT.test(s)
+
 function segment(raw: string): string {
   if (raw === '') return raw
   let s = raw
   try {
     s = decodeURIComponent(raw)
   } catch {}
-  return digits(s) >= 9 || UUID.test(s) || TOKEN.test(s) || EMAIL_SEGMENT.test(s) ? ':id' : raw
+  return isId(s) ? ':id' : raw
 }
 
 /* A cut can end inside a multi-byte character (%E2%82 of %E2%82%AC): valid escapes that do not
@@ -99,7 +120,7 @@ export function storedPath(pathname: string): string {
       try {
         s = decodeURIComponent(raw)
       } catch {}
-      return digits(s) >= 9 || UUID.test(s) || TOKEN.test(s) || EMAIL_SEGMENT.test(s) ? ':id' : s
+      return isId(s) ? ':id' : s
     })
     .join('/')
   return truncate(path, URL_MAX) || '/'

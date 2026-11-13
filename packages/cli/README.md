@@ -1,9 +1,10 @@
 # @plaintrace/cli
 
-Adds the analytics script to a web project in one command.
+Adds the [Plaintrace](https://plaintrace.dev) analytics script to a web project in one command. Your site id is in
+the dashboard under Settings → Install.
 
 ```bash
-npx @plaintrace/cli init --site <site id> --endpoint https://collect.example.com
+npx @plaintrace/cli init --site <site id> --endpoint https://collect.plaintrace.dev
 ```
 
 It finds your framework, shows the change as a diff, and asks before writing. By default it pins the
@@ -28,3 +29,8 @@ Exit codes: 0 done or nothing to do, 1 needs your input, 2 failed.
 
 JSX targets get only the script tag, without the inline `px()` queue stub; call `px()` after the
 script loads, or add the stub yourself with `dangerouslySetInnerHTML`.
+
+## Licence
+
+MIT © VALUNLABS LLC. Docs: [plaintrace.dev/docs](https://plaintrace.dev/docs). Issues:
+[GitHub](https://github.com/plaintrace-dev/node-sdk/issues).

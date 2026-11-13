@@ -1,22 +1,26 @@
 # @plaintrace/browser
 
-The cookieless browser tracker. No cookies, no device identifiers: the collector counts
-visitors with a daily, salted hash it cannot reverse, and the browser keeps only two things,
-the visitor's consent answer and the site owner's own opt-out. About 5.5 KB gzip.
+The browser tracker for [Plaintrace](https://plaintrace.dev), cookieless web analytics that tells you how far to
+trust every number. No cookies, no device identifiers: the collector counts visitors with a daily, salted hash
+it cannot reverse, and the browser keeps only two things, the visitor's consent answer and the site owner's own
+opt-out. About 8 KB gzip.
+
+Docs: [plaintrace.dev/docs](https://plaintrace.dev/docs) · Your site id is in the dashboard under Settings → Install.
 
 ## Script tag
 
-Use the versioned URL with its integrity hash (both from `GET <collector>/v1/sdk`):
+The dashboard gives you the tag with the current version and its integrity hash (also at
+`https://collect.plaintrace.dev/v1/sdk`), or run `npx @plaintrace/cli init`:
 
 ```html
 <script>if(!window.px){var p=window.px=function(){p.q.push(arguments)};p.q=[];p.s=1}</script>
-<script async src="https://<collector>/v/0.1.0/t.js"
+<script async src="https://collect.plaintrace.dev/v/<version>/t.js"
         integrity="sha384-…" crossorigin="anonymous"
         data-site="<site id>"></script>
 ```
 
-`https://<collector>/t.js` always serves the latest release (5-minute cache) for those who
-prefer automatic updates over a pinned hash. The one-line stub lets you call `px(...)` before
+`https://collect.plaintrace.dev/t.js` always serves the latest release (5-minute cache) for those who prefer
+automatic updates over a pinned hash. A published version never changes, so its hash keeps matching. The one-line stub lets you call `px(...)` before
 the script arrives; calls are applied in order once it does.
 
 ```js
@@ -33,7 +37,7 @@ const visit = px('visitId')              // for checkout metadata (revenue attri
 ```ts
 import { init, track } from '@plaintrace/browser'
 
-init({ site: '<site id>', endpoint: 'https://<collector>' })   // undefined during SSR
+init({ site: '<site id>', endpoint: 'https://collect.plaintrace.dev' })   // undefined during SSR
 track('signup', { plan: 'pro' })
 ```
 
@@ -70,8 +74,8 @@ track('signup', { plan: 'pro' })
 
 Before anything leaves the browser, the fragment and credentials are removed from addresses,
 sensitive parameters (`token`, `email`, `password`, … and your site's own list) are dropped,
-emails and long digit runs become `[redacted]`, and ids in paths (`/users/<uuid>`) become
-`:id`. The collector applies the same rules again for any other sender.
+emails and long digit runs become `[redacted]`, and ids in paths (`/users/<uuid>`, long random strings)
+become `:id`; long readable page names such as `/resize-for-instagram-post` are kept. The collector applies the same rules again for any other sender.
 
 Opening a page from the dashboard's Heatmaps tab adds `#pt-heatmap=…` to its address: the
 tracker then measures nothing, removes the token from the address, and loads the overlay
@@ -83,3 +87,8 @@ counted unless `debug` is on.
 
 Failed sends are retried with backoff and the collector's `Retry-After`; what is finally
 lost is counted and reported, so reports can say how complete they are.
+
+## Licence
+
+MIT © VALUNLABS LLC. Questions and issues: [hello@plaintrace.dev](mailto:hello@plaintrace.dev) or
+[GitHub](https://github.com/plaintrace-dev/node-sdk/issues).

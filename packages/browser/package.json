@@ -1,18 +1,30 @@
 {
   "name": "@plaintrace/browser",
-  "version": "0.2.1",
-  "description": "Cookieless browser tracker for the analytics collector.",
+  "version": "0.2.2",
+  "description": "Plaintrace browser tracker: cookieless, privacy-first web analytics that tells you how far to trust every number.",
+  "keywords": [
+    "analytics",
+    "web-analytics",
+    "cookieless",
+    "privacy",
+    "gdpr",
+    "tracker",
+    "plaintrace"
+  ],
   "license": "MIT",
+  "author": "VALUNLABS LLC (https://plaintrace.dev)",
+  "homepage": "https://plaintrace.dev/docs",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/plaintrace-dev/node-sdk.git",
     "directory": "packages/browser"
   },
-  "homepage": "https://plaintrace.dev",
-  "type": "module",
-  "engines": {
-    "node": ">=24"
+  "bugs": {
+    "url": "https://github.com/plaintrace-dev/node-sdk/issues",
+    "email": "hello@plaintrace.dev"
   },
+  "type": "module",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -20,14 +32,19 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node build.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "e2e": "playwright test --project=chromium && playwright test --project=bfcache"
+    "e2e": "playwright test --project=chromium && playwright test --project=bfcache",
+    "prepublishOnly": "npm run build && npm test"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",

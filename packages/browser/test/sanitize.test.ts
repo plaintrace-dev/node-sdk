@@ -70,3 +70,14 @@ test('a truncated URL never ends inside a multi-byte character', () => {
 test('an address that was not cut keeps its escapes as they were', () => {
   expect(cleanUrl('https://a.com/foo%C3', [])).toBe('https://a.com/foo%C3')
 })
+
+test('long readable page names are kept; tokens are still hidden (same rule as the collector)', () => {
+  for (const slug of ['resize-for-instagram-profile-picture', 'how-to-resize-image-without-losing-quality', 'instagram-image-size-guide-2026', 'png_to_webp_converter_online', '1920x1080-wallpaper-download-free', 'how-to-use-gpt4o-for-sql-queries']) {
+    expect(cleanUrl(`https://a.com/guides/${slug}`, [])).toBe(`https://a.com/guides/${slug}`)
+    expect(storedPath(`/guides/${slug}`)).toBe(`/guides/${slug}`)
+  }
+  for (const tok of ['aB3dE5fG7hJ9kL1mN3pQ5rS7', '3f9a8b7c6d5e4f3a2b1c0d9e8f7a', 'reset-k3j4h5g6f7d8s9a0q1w2e3r4', 'eyJhbGciOiJIUzI1NiJ9-abc_DEF', 'ab3k-9xqz-mm2p-7rtw-lq8v', 'dfxyuokixugpbnrh-bfsvxktajoaaevik']) {
+    expect(cleanUrl(`https://a.com/x/${tok}`, [])).toBe('https://a.com/x/:id')
+    expect(storedPath(`/x/${tok}`)).toBe('/x/:id')
+  }
+})

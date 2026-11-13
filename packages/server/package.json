@@ -1,18 +1,31 @@
 {
   "name": "@plaintrace/server",
   "version": "0.1.0",
-  "description": "First-party proxy, crawler reads, loss measurement and server-side events for the analytics collector.",
+  "description": "Plaintrace for your server: first-party proxy, crawler reads, measured loss and server-side events.",
+  "keywords": [
+    "analytics",
+    "web-analytics",
+    "cookieless",
+    "privacy",
+    "server-side",
+    "proxy",
+    "crawlers",
+    "plaintrace"
+  ],
   "license": "MIT",
+  "author": "VALUNLABS LLC (https://plaintrace.dev)",
+  "homepage": "https://plaintrace.dev/docs",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/plaintrace-dev/node-sdk.git",
     "directory": "packages/server"
   },
-  "homepage": "https://plaintrace.dev",
-  "type": "module",
-  "engines": {
-    "node": ">=24"
+  "bugs": {
+    "url": "https://github.com/plaintrace-dev/node-sdk/issues",
+    "email": "hello@plaintrace.dev"
   },
+  "type": "module",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -20,12 +33,20 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
     "isbot": "5.2.2"

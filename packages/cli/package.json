@@ -1,28 +1,46 @@
 {
   "name": "@plaintrace/cli",
   "version": "0.1.0",
-  "description": "Adds the analytics tracker to a web project: npx @plaintrace/cli init --site <id> --endpoint <collector>",
+  "description": "Adds the Plaintrace analytics script to a web project: npx @plaintrace/cli init --site <id>",
+  "keywords": [
+    "analytics",
+    "cookieless",
+    "privacy",
+    "cli",
+    "setup",
+    "plaintrace"
+  ],
   "license": "MIT",
+  "author": "VALUNLABS LLC (https://plaintrace.dev)",
+  "homepage": "https://plaintrace.dev/docs",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/plaintrace-dev/node-sdk.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://plaintrace.dev",
-  "type": "module",
-  "engines": {
-    "node": ">=24"
+  "bugs": {
+    "url": "https://github.com/plaintrace-dev/node-sdk/issues",
+    "email": "hello@plaintrace.dev"
   },
+  "type": "module",
   "bin": {
     "plaintrace": "dist/bin.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build && npm test"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
